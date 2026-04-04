@@ -1,8 +1,16 @@
 import express from 'express';
 import { randomUUID } from 'crypto';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 const app = express();
 app.use(express.json({ limit: '1mb' }));
+
+// Serve a tiny static frontend from repo root (index.html + main.js + styles.css)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const rootDir = path.resolve(__dirname, '..');
+app.use(express.static(rootDir));
 
 /**
  * In-memory storage.

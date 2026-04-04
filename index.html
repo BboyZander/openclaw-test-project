@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Booking request</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <h1>Podcast studio booking request</h1>
+
+      <div id="statusBanner" class="banner" hidden></div>
+
+      <form id="bookingForm" class="card">
+        <div class="field">
+          <label>Name *</label>
+          <input name="name" autocomplete="name" />
+          <div class="error" data-error-for="name"></div>
+        </div>
+
+        <div class="field">
+          <label>Email *</label>
+          <input name="email" type="email" autocomplete="email" />
+          <div class="error" data-error-for="email"></div>
+        </div>
+
+        <div class="field">
+          <label>Date *</label>
+          <input name="date" type="date" />
+          <div class="error" data-error-for="date"></div>
+        </div>
+
+        <div class="field">
+          <label>Duration *</label>
+          <select name="duration_minutes">
+            <option value="">Select…</option>
+            <option value="30">30 min</option>
+            <option value="60">60 min</option>
+            <option value="90">90 min</option>
+          </select>
+          <div class="error" data-error-for="duration_minutes"></div>
+        </div>
+
+        <div class="field">
+          <label>Format *</label>
+          <select name="format">
+            <option value="">Select…</option>
+            <option value="audio">Audio</option>
+            <option value="video">Video</option>
+          </select>
+          <div class="error" data-error-for="format"></div>
+        </div>
+
+        <div class="field">
+          <label>Comment</label>
+          <textarea name="comment" rows="4" placeholder="Anything we should know?"></textarea>
+          <div class="error" data-error-for="comment"></div>
+        </div>
+
+        <div class="fieldset">
+          <label class="checkbox">
+            <input name="consent" type="checkbox" />
+            <span>I agree to submit this request *</span>
+          </label>
+          <div class="error" data-error-for="consent"></div>
+        </div>
+
+        <div class="actions">
+          <button id="submitBtn" type="submit">Submit</button>
+          <button id="aiReviewBtn" type="button">AI review</button>
+        </div>
+      </form>
+
+      <section id="aiPanel" class="card" hidden>
+        <h2>AI review</h2>
+        <p id="aiReviewMeta" class="muted"></p>
+        <h3>Suggestions</h3>
+        <ul id="suggestionsList"></ul>
+        <h3>Warnings</h3>
+        <ul id="warningsList"></ul>
+      </section>
+
+      <section id="successState" class="card" hidden>
+        <h2>Submitted</h2>
+        <p>Thanks — your booking request was submitted.</p>
+        <button id="resetBtn" type="button">Submit another</button>
+      </section>
+    </main>
+
+    <script src="/main.js"></script>
+  </body>
+</html>
