@@ -29,6 +29,15 @@ function validationFailed(res, fieldErrors) {
   });
 }
 
+function notFound(res) {
+  return res.status(404).json({
+    error: {
+      code: 'not_found',
+      message: 'Заявка не найдена',
+    },
+  });
+}
+
 function isNonEmptyString(v) {
   return typeof v === 'string' && v.trim().length > 0;
 }
@@ -41,8 +50,10 @@ function isValidEmail(email) {
 }
 
 function parseDate(value) {
+  // FE contract: YYYY-MM-DD (no time)
   if (typeof value !== 'string') return { ok: false };
-  const d = new Date(value);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return { ok: false };
+  const d = new Date(`${value}T00:00:00Z`);
   if (Number.isNaN(d.getTime())) return { ok: false };
   return { ok: true, date: d };
 }
@@ -83,61 +94,61 @@ function buildAiReview(draft) {
   const warnings = [];
 
   if (!draft.name) {
-    pushWarning(warnings, 'missing_name', 'Name is missing.');
+    pushWarning(warnings, 'missing_name', 'Не указано имя.');
   }
 
   if (!draft.email) {
-    pushWarning(warnings, 'missing_email', 'Email is missing.');
+    pushWarning(warnings, 'missing_email', 'Не указан email.');
   } else if (!isValidEmail(draft.email)) {
-    pushWarning(warnings, 'invalid_email', 'Email does not look valid.');
+    pushWarning(warnings, 'invalid_email', 'Email выглядит некорректно.');
   } else {
     const normalized = draft.email.toLowerCase();
     if (normalized !== draft.email) {
-      pushSuggestion(suggestions, 'email', normalized, 0.97, 'Normalize email to lowercase.');
+      pushSuggestion(suggestions, 'email', normalized, 0.97, 'Нормализовать email в нижний регистр.');
     }
   }
 
   if (!draft.date) {
-    pushWarning(warnings, 'missing_date', 'Date is missing.');
+    pushWarning(warnings, 'missing_date', 'Не указана дата.');
   } else {
     const parsed = parseDate(draft.date);
     if (!parsed.ok) {
-      pushWarning(warnings, 'invalid_date', 'Date must be parseable as a calendar date.');
+      pushWarning(warnings, 'invalid_date', 'Дата должна быть в формате YYYY-MM-DD.');
     } else if (isPast(parsed.date)) {
-      pushWarning(warnings, 'date_in_past', 'Selected date is in the past.');
+      pushWarning(warnings, 'date_in_past', 'Выбранная дата в прошлом.');
     }
   }
 
   const allowedDurations = [30, 60, 90];
   if (draft.duration_minutes === '') {
-    pushWarning(warnings, 'missing_duration_minutes', 'Duration is missing.');
+    pushWarning(warnings, 'missing_duration_minutes', 'Не указана длительность.');
   } else {
     const n = typeof draft.duration_minutes === 'number' ? draft.duration_minutes : Number(draft.duration_minutes);
     if (!Number.isInteger(n)) {
-      pushWarning(warnings, 'invalid_duration_minutes', 'Duration must be a whole number.');
+      pushWarning(warnings, 'invalid_duration_minutes', 'Длительность должна быть целым числом.');
     } else if (!allowedDurations.includes(n)) {
-      pushWarning(warnings, 'unsupported_duration_minutes', 'Duration should be 30, 60, or 90 minutes.');
+      pushWarning(warnings, 'unsupported_duration_minutes', 'Длительность должна быть 30, 60 или 90 минут.');
       const closest = allowedDurations.reduce(
         (prev, current) => (Math.abs(current - n) < Math.abs(prev - n) ? current : prev),
         allowedDurations[0],
       );
-      pushSuggestion(suggestions, 'duration_minutes', closest, 0.72, 'Closest supported duration.');
+      pushSuggestion(suggestions, 'duration_minutes', closest, 0.72, 'Ближайшее поддерживаемое значение.');
     }
   }
 
   const allowedFormats = new Set(['audio', 'video']);
   if (!draft.format) {
-    pushWarning(warnings, 'missing_format', 'Format is missing.');
+    pushWarning(warnings, 'missing_format', 'Не указан формат.');
   } else if (!allowedFormats.has(draft.format)) {
-    pushWarning(warnings, 'unsupported_format', 'Format should be audio or video.');
+    pushWarning(warnings, 'unsupported_format', 'Формат должен быть audio или video.');
   }
 
   if (draft.comment.length > 2000) {
-    pushWarning(warnings, 'comment_too_long', 'Comment is too long.');
+    pushWarning(warnings, 'comment_too_long', 'Комментарий слишком длинный.');
   }
 
   if (!draft.consent) {
-    pushWarning(warnings, 'consent_required', 'Consent must be true before submitting.');
+    pushWarning(warnings, 'consent_required', 'Необходимо согласие перед отправкой.');
   }
 
   return { suggestions, warnings };
@@ -147,8 +158,7 @@ app.get('/api/health', (req, res) => {
   res.json({ ok: true });
 });
 
-app.post('/api/booking-requests', (req, res) => {
-  const body = req.body ?? {};
+function validateBookingPayload(body) {
   const fieldErrors = {};
 
   // required: name
@@ -191,17 +201,15 @@ app.post('/api/booking-requests', (req, res) => {
   // consent must be true
   if (body.consent !== true) fieldErrors.consent = 'must_be_true';
 
-  if (Object.keys(fieldErrors).length > 0) {
-    return validationFailed(res, fieldErrors);
-  }
+  return fieldErrors;
+}
 
-  const id = randomUUID();
-  const createdAt = new Date().toISOString();
-
-  const record = {
+function toBookingRecord(id, createdAt, updatedAt, body) {
+  return {
     id,
     status: 'new',
     created_at: createdAt,
+    updated_at: updatedAt,
     name: body.name.trim(),
     email: body.email.trim().toLowerCase(),
     date: body.date,
@@ -210,6 +218,35 @@ app.post('/api/booking-requests', (req, res) => {
     comment: body.comment ?? null,
     consent: true,
   };
+}
+
+app.get('/api/booking-requests', (req, res) => {
+  const items = Array.from(bookingRequests.values()).sort((a, b) => {
+    // newest first
+    if (a.created_at > b.created_at) return -1;
+    if (a.created_at < b.created_at) return 1;
+    return 0;
+  });
+  return res.json({ items });
+});
+
+app.get('/api/booking-requests/:id', (req, res) => {
+  const item = bookingRequests.get(req.params.id);
+  if (!item) return notFound(res);
+  return res.json({ item });
+});
+
+app.post('/api/booking-requests', (req, res) => {
+  const body = req.body ?? {};
+  const fieldErrors = validateBookingPayload(body);
+
+  if (Object.keys(fieldErrors).length > 0) {
+    return validationFailed(res, fieldErrors);
+  }
+
+  const id = randomUUID();
+  const now = new Date().toISOString();
+  const record = toBookingRecord(id, now, now, body);
 
   bookingRequests.set(id, record);
 
@@ -218,6 +255,24 @@ app.post('/api/booking-requests', (req, res) => {
     status: record.status,
     created_at: record.created_at,
   });
+});
+
+app.put('/api/booking-requests/:id', (req, res) => {
+  const id = req.params.id;
+  const existing = bookingRequests.get(id);
+  if (!existing) return notFound(res);
+
+  const body = req.body ?? {};
+  const fieldErrors = validateBookingPayload(body);
+  if (Object.keys(fieldErrors).length > 0) {
+    return validationFailed(res, fieldErrors);
+  }
+
+  const updatedAt = new Date().toISOString();
+  const record = toBookingRecord(existing.id, existing.created_at, updatedAt, body);
+  bookingRequests.set(id, record);
+
+  return res.json({ item: record });
 });
 
 app.post('/api/booking-requests/ai-review', (req, res) => {
@@ -233,7 +288,7 @@ app.use((err, req, res, next) => {
     return res.status(400).json({
       error: {
         code: 'bad_json',
-        message: 'Malformed JSON body',
+        message: 'Некорректный JSON в теле запроса',
       },
     });
   }
