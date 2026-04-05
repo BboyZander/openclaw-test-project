@@ -14,16 +14,15 @@ const form = el('bookingForm');
 const formTitle = el('formTitle');
 const formHint = el('formHint');
 const submitBtn = el('submitBtn');
-const aiReviewBtn = el('aiReviewBtn');
+const fillExampleBtn = el('fillExampleBtn');
 const cancelEditBtn = el('cancelEditBtn');
 const successState = el('successState');
 const resetBtn = el('resetBtn');
 
-// AI panel
-const aiPanel = el('aiPanel');
-const aiReviewMeta = el('aiReviewMeta');
-const suggestionsList = el('suggestionsList');
-const warningsList = el('warningsList');
+// Datepicker
+const dateInput = el('dateInput');
+const datePickerBtn = el('datePickerBtn');
+const datePicker = el('datePicker');
 
 // List
 const refreshListBtn = el('refreshListBtn');
@@ -45,8 +44,12 @@ function setBanner(message, type = '') {
 
 function setBusy(isBusy) {
   submitBtn.disabled = isBusy;
-  aiReviewBtn.disabled = isBusy;
+  fillExampleBtn.disabled = isBusy;
   cancelEditBtn.disabled = isBusy;
+  refreshListBtn.disabled = isBusy;
+  tabNew.disabled = isBusy;
+  tabList.disabled = isBusy;
+  datePickerBtn.disabled = isBusy;
   fields.forEach((field) => (field.disabled = isBusy));
 }
 
@@ -72,14 +75,13 @@ function showServerErrors(payload) {
   clearFieldErrors();
   const fieldErrors = payload?.error?.details?.fieldErrors || payload?.details?.fieldErrors || {};
   Object.entries(fieldErrors).forEach(([field, message]) => {
-    // Сервер возвращает коды, UI показывает русские подсказки.
-    setFieldError(field, mapServerFieldError(field, message));
+    setFieldError(field, mapServerFieldError(message));
   });
   const hasFieldErrors = Object.keys(fieldErrors).length > 0;
   setBanner(hasFieldErrors ? 'Проверка на сервере не прошла — исправьте поля.' : 'Ошибка на сервере.', 'error');
 }
 
-function mapServerFieldError(field, code) {
+function mapServerFieldError(code) {
   const common = {
     required: 'Поле обязательно.',
     invalid_format: 'Неверный формат.',
@@ -88,9 +90,7 @@ function mapServerFieldError(field, code) {
     max_length: 'Слишком длинный текст.',
     must_be_true: 'Нужно подтвердить согласие.',
   };
-  if (common[code]) return common[code];
-  // fallback
-  return `Ошибка: ${code}`;
+  return common[code] || `Ошибка: ${code}`;
 }
 
 function getValues() {
@@ -129,40 +129,6 @@ function validate(values) {
   return errors;
 }
 
-function renderReview(title, payload) {
-  aiPanel.hidden = false;
-  aiReviewMeta.textContent = title;
-
-  suggestionsList.innerHTML = '';
-  warningsList.innerHTML = '';
-
-  for (const item of payload.suggestions || []) {
-    const li = document.createElement('li');
-    if (typeof item === 'string') li.textContent = item;
-    else {
-      const field = item.field ? `${item.field}: ` : '';
-      const value = item.value !== undefined ? JSON.stringify(item.value) : '';
-      const conf = item.confidence !== undefined ? ` (conf ${item.confidence})` : '';
-      const reason = item.reason ? ` — ${item.reason}` : '';
-      li.textContent = `${field}${value}${conf}${reason}`.trim();
-    }
-    suggestionsList.appendChild(li);
-  }
-
-  for (const item of payload.warnings || []) {
-    const li = document.createElement('li');
-    if (typeof item === 'string') li.textContent = item;
-    else {
-      const code = item.code ? `${item.code}: ` : '';
-      li.textContent = `${code}${item.message || ''}`.trim();
-    }
-    warningsList.appendChild(li);
-  }
-
-  if (!payload.suggestions?.length) suggestionsList.innerHTML = '<li>Нет рекомендаций.</li>';
-  if (!payload.warnings?.length) warningsList.innerHTML = '<li>Нет предупреждений.</li>';
-}
-
 function setTab(active) {
   const isNew = active === 'new';
   tabNew.classList.toggle('is-active', isNew);
@@ -184,7 +150,6 @@ function resetToCreateMode() {
   form.reset();
   form.hidden = false;
   successState.hidden = true;
-  aiPanel.hidden = true;
   clearFieldErrors();
   setBanner('');
 }
@@ -200,9 +165,7 @@ function setEditMode(item) {
 
   form.hidden = false;
   successState.hidden = true;
-  aiPanel.hidden = true;
 
-  // Fill fields
   form.elements.name.value = item.name ?? '';
   form.elements.email.value = item.email ?? '';
   form.elements.date.value = item.date ?? '';
@@ -262,7 +225,7 @@ function renderBookingCard(item) {
       setTab('new');
       setEditMode(data.item);
       setBanner('');
-    } catch (e) {
+    } catch {
       setBanner('Не удалось загрузить заявку. Попробуйте ещё раз.', 'error');
     } finally {
       setBusy(false);
@@ -292,18 +255,187 @@ async function loadList() {
 
     for (const item of items) bookingsList.appendChild(renderBookingCard(item));
     setBanner('');
-  } catch (e) {
+  } catch {
     setBanner('Не удалось загрузить список заявок.', 'error');
   } finally {
     setBusy(false);
   }
 }
 
-// Tabs events
-	abNew.addEventListener('click', () => {
+// ----- Test data -----
+function randInt(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function pick(arr) {
+  return arr[randInt(0, arr.length - 1)];
+}
+
+function isoDateYYYYMMDD(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function fillExample() {
+  const first = pick(['Алексей', 'Мария', 'Ирина', 'Дмитрий', 'Светлана', 'Никита', 'Екатерина']);
+  const last = pick(['Иванов', 'Петрова', 'Смирнов', 'Кузнецова', 'Соколов', 'Попова']);
+  const n = randInt(10, 99);
+  const domains = ['example.com', 'mail.test', 'demo.local'];
+
+  const daysAhead = randInt(1, 30);
+  const d = new Date();
+  d.setDate(d.getDate() + daysAhead);
+
+  form.elements.name.value = `${first} ${last}`;
+  form.elements.email.value = `${first.toLowerCase()}.${last.toLowerCase()}${n}@${pick(domains)}`;
+  form.elements.date.value = isoDateYYYYMMDD(d);
+  form.elements.duration_minutes.value = String(pick([30, 60, 90]));
+  form.elements.format.value = pick(['audio', 'video']);
+  form.elements.comment.value = pick([
+    'Хочу записать интервью на 2 микрофона.',
+    'Нужен видеосвет и тихая комната.',
+    'Это тестовая заявка для проверки формы.',
+    '',
+  ]);
+  form.elements.consent.checked = true;
+
+  clearFieldErrors();
+  setBanner('Форма заполнена тестовыми данными.', 'success');
+}
+
+// ----- Datepicker (lightweight, no deps) -----
+let dpMonth = new Date();
+
+function clampToStartOfDay(date) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function parseYYYYMMDD(s) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const d = new Date(`${s}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return null;
+  return d;
+}
+
+function openDatePicker() {
+  datePicker.hidden = false;
+  const current = parseYYYYMMDD(dateInput.value);
+  dpMonth = current ? new Date(current) : new Date();
+  dpMonth.setDate(1);
+  renderDatePicker();
+}
+
+function closeDatePicker() {
+  datePicker.hidden = true;
+}
+
+function renderDatePicker() {
+  const month = dpMonth.getMonth();
+  const year = dpMonth.getFullYear();
+
+  const first = new Date(year, month, 1);
+  const last = new Date(year, month + 1, 0);
+
+  const startWeekday = (first.getDay() + 6) % 7; // Mon=0
+  const totalDays = last.getDate();
+
+  const monthNames = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+  const weekday = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+
+  const selected = parseYYYYMMDD(dateInput.value);
+  const selectedKey = selected ? isoDateYYYYMMDD(selected) : null;
+
+  datePicker.innerHTML = '';
+
+  const header = document.createElement('div');
+  header.className = 'datepicker__header';
+
+  const prev = document.createElement('button');
+  prev.type = 'button';
+  prev.className = 'btn btn--ghost datepicker__nav';
+  prev.textContent = '‹';
+  prev.addEventListener('click', () => {
+    dpMonth = new Date(year, month - 1, 1);
+    renderDatePicker();
+  });
+
+  const title = document.createElement('div');
+  title.className = 'datepicker__title';
+  title.textContent = `${monthNames[month]} ${year}`;
+
+  const next = document.createElement('button');
+  next.type = 'button';
+  next.className = 'btn btn--ghost datepicker__nav';
+  next.textContent = '›';
+  next.addEventListener('click', () => {
+    dpMonth = new Date(year, month + 1, 1);
+    renderDatePicker();
+  });
+
+  header.appendChild(prev);
+  header.appendChild(title);
+  header.appendChild(next);
+
+  const grid = document.createElement('div');
+  grid.className = 'datepicker__grid';
+
+  for (const wd of weekday) {
+    const cell = document.createElement('div');
+    cell.className = 'datepicker__wd';
+    cell.textContent = wd;
+    grid.appendChild(cell);
+  }
+
+  // empty cells
+  for (let i = 0; i < startWeekday; i++) {
+    const cell = document.createElement('div');
+    cell.className = 'datepicker__empty';
+    grid.appendChild(cell);
+  }
+
+  const today = clampToStartOfDay(new Date());
+  for (let day = 1; day <= totalDays; day++) {
+    const d = new Date(year, month, day);
+    const key = isoDateYYYYMMDD(d);
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'datepicker__day';
+    btn.textContent = String(day);
+
+    if (key === selectedKey) btn.classList.add('is-selected');
+    if (clampToStartOfDay(d) < today) btn.classList.add('is-disabled');
+
+    btn.addEventListener('click', () => {
+      if (btn.classList.contains('is-disabled')) return;
+      dateInput.value = key;
+      closeDatePicker();
+      // revalidate on pick
+      const errors = validate(getValues());
+      if (errors.date) setFieldError('date', errors.date);
+      else setFieldError('date', '');
+    });
+
+    grid.appendChild(btn);
+  }
+
+  datePicker.appendChild(header);
+  datePicker.appendChild(grid);
+}
+
+// ----- Events -----
+
+tabNew.addEventListener('click', () => {
   setTab('new');
 });
-	tabList.addEventListener('click', async () => {
+
+// fix #1: make sure tabList reliably switches + loads
+// (previous code had a typo causing runtime error)
+tabList.addEventListener('click', async () => {
   setTab('list');
   await loadList();
 });
@@ -314,11 +446,38 @@ cancelEditBtn.addEventListener('click', () => {
   resetToCreateMode();
 });
 
+fillExampleBtn.addEventListener('click', () => {
+  fillExample();
+});
+
+// Datepicker
+function toggleDatePicker() {
+  if (datePicker.hidden) openDatePicker();
+  else closeDatePicker();
+}
+
+datePickerBtn.addEventListener('click', (e) => {
+  e.preventDefault();
+  toggleDatePicker();
+});
+
+dateInput.addEventListener('focus', () => {
+  // show on focus for better UX
+  openDatePicker();
+});
+
+document.addEventListener('click', (e) => {
+  if (datePicker.hidden) return;
+  const target = e.target;
+  if (target === datePicker || datePicker.contains(target)) return;
+  if (target === dateInput || target === datePickerBtn) return;
+  closeDatePicker();
+});
+
 // Form submit
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
   successState.hidden = true;
-  aiPanel.hidden = true;
 
   const values = getValues();
   const clientErrors = validate(values);
@@ -356,46 +515,15 @@ form.addEventListener('submit', async (event) => {
 
     if (isEdit) {
       setBanner('Изменения сохранены.', 'success');
-      // после редактирования возвращаемся к списку
       setTab('list');
       await loadList();
     } else {
       form.hidden = true;
-      aiPanel.hidden = true;
       successState.hidden = false;
       setBanner('Заявка отправлена.', 'success');
     }
-  } catch (error) {
+  } catch {
     setBanner('Не удалось отправить запрос. Попробуйте ещё раз.', 'error');
-  } finally {
-    setBusy(false);
-  }
-});
-
-// AI review
-aiReviewBtn.addEventListener('click', async () => {
-  const values = getValues();
-  const clientErrors = validate(values);
-  if (Object.keys(clientErrors).length) {
-    showErrors(clientErrors);
-    return;
-  }
-
-  setBusy(true);
-  setBanner('Запускаю AI-проверку…');
-
-  try {
-    const { response, data } = await apiJson('/api/booking-requests/ai-review', {
-      method: 'POST',
-      body: JSON.stringify(values),
-    });
-
-    if (!response.ok) throw new Error(`AI review failed (${response.status})`);
-
-    renderReview('Рекомендации и предупреждения на основе текущего состояния формы.', data);
-    setBanner('AI-проверка завершена.', 'success');
-  } catch (error) {
-    setBanner('AI-проверка сейчас недоступна.', 'error');
   } finally {
     setBusy(false);
   }
@@ -415,3 +543,4 @@ for (const input of fields) {
 // Init
 resetToCreateMode();
 setTab('new');
+setBanner('');
