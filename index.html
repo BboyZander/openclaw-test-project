@@ -46,7 +46,11 @@
 
           <div class="field">
             <label>Дата *</label>
-            <input name="date" type="date" />
+            <div class="dateRow">
+              <input id="dateInput" name="date" type="text" inputmode="numeric" placeholder="ГГГГ-ММ-ДД" autocomplete="off" />
+              <button id="datePickerBtn" class="btn btn--ghost" type="button" aria-label="Открыть календарь">Календарь</button>
+            </div>
+            <div id="datePicker" class="datepicker" hidden></div>
             <div class="error" data-error-for="date"></div>
           </div>
 
@@ -87,19 +91,10 @@
 
           <div class="actions">
             <button id="submitBtn" class="btn btn--primary" type="submit">Отправить</button>
-            <button id="aiReviewBtn" class="btn" type="button">AI-проверка</button>
+            <button id="fillExampleBtn" class="btn" type="button">Заполнить примером</button>
             <button id="cancelEditBtn" class="btn btn--ghost" type="button" hidden>Отменить редактирование</button>
           </div>
         </form>
-
-        <section id="aiPanel" class="card" hidden>
-          <h2>AI-проверка</h2>
-          <p id="aiReviewMeta" class="muted"></p>
-          <h3>Рекомендации</h3>
-          <ul id="suggestionsList"></ul>
-          <h3>Предупреждения</h3>
-          <ul id="warningsList"></ul>
-        </section>
 
         <section id="successState" class="card" hidden>
           <h2>Готово</h2>
