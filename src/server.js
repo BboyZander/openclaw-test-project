@@ -33,7 +33,7 @@ function notFound(res) {
   return res.status(404).json({
     error: {
       code: 'not_found',
-      message: 'Booking request not found',
+      message: 'Заявка не найдена',
     },
   });
 }
