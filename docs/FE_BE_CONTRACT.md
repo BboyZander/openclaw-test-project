@@ -86,7 +86,7 @@
 
 **404**
 ```json
-{ "error": { "code": "not_found", "message": "Booking request not found" } }
+{ "error": { "code": "not_found", "message": "Заявка не найдена" } }
 ```
 
 ### 5) Обновление заявки (редактирование)
